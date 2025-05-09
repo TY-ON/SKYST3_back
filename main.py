@@ -51,7 +51,7 @@ def get_db():
 # FastAPI app
 app = FastAPI()
 
-@app.post("/register")
+@app.post("/api/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -69,14 +69,14 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "User registered successfully"}
 
-@app.post("/login")
+@app.post("/api/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not bcrypt.verify(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"message": f"Welcome {user.name}"}
 
-@app.post("/find-password")
+@app.post("/api/find-password")
 def find_password(data: FindPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username, User.email == data.email).first()
     if not user:
