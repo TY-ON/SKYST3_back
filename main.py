@@ -23,6 +23,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     instrument = Column(String, nullable=False)
+    zip_code = Column(Integer, nullable=False)
 
 Base.metadata.create_all(bind=engine)
 
@@ -33,6 +34,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     instrument: str
+    zip_code: int
 
 class LoginRequest(BaseModel):
     username: str
@@ -66,7 +68,8 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         password=hashed_password,
         name=data.name,
         email=data.email,
-        instrument=data.instrument
+        instrument=data.instrument,
+        zip_code=data.zip_code
     )
     db.add(user)
     db.commit()
