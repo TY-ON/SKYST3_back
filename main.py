@@ -113,7 +113,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     {
         "username": "amugae_kim",
         "password": "securepassword123",
-        "name": "Amugae Kim",
+        "name": "nickname",
         "email": "kim@example.com",
         "instrument": "guitar",
         "zip_code": 90210
