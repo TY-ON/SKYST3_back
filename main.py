@@ -57,6 +57,34 @@ app = FastAPI()
 
 @app.post("/api/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    """
+    [Register API]
+    POST /api/register
+    Registers a new user.
+
+    Allowed instruments:
+    - keyboard
+    - vocal
+    - bass
+    - drum
+    - guitar
+    - etc
+
+    Request Body Example (JSON):
+    {
+        "username": "amugae_kim",
+        "password": "securepassword123",
+        "name": "Amugae Kim",
+        "email": "kim@example.com",
+        "instrument": "guitar",
+        "zip_code": 90210
+    }
+
+    Responses:
+    - 200 OK: User registered successfully
+    - 400 Bad Request: Username or email already exists
+    """
+    
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
     if db.query(User).filter(User.email == data.email).first():
@@ -77,6 +105,22 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
+    """
+    [Login API]
+    POST /api/login
+    Authenticates an existing user with username and password.
+
+    Request Body Example (JSON):
+    {
+        "username": "amugae_kim",
+        "password": "securepassword123"
+    }
+
+    Responses:
+    - 200 OK: Returns a welcome message
+    - 401 Unauthorized: Invalid username or password
+    - Sets a jwt token in the session cookie
+    """
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not bcrypt.verify(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
