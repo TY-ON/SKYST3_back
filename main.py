@@ -84,5 +84,5 @@ def find_password(data: FindPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username, User.email == data.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # In a real application, you'd send a password reset email or similar secure process.
+    # add if needed (currently just skeleton)
     return {"message": "Password reset link sent to your email (simulation)"}
