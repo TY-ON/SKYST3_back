@@ -50,8 +50,8 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     instrument = Column(String, nullable=False)
+    address = Column(String, nullable=False)
     zip_code = Column(String, nullable=False)
-
 
 class Room(Base):
     __tablename__ = "room"
@@ -87,7 +87,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     instrument: str
-    zip_code: str
+    address: str
 
 class LoginRequest(BaseModel):
     username: str
@@ -159,6 +159,38 @@ def get_area_by_gu(gu_name: str):
             return area
     return None
 
+def get_zip_from_addr(addr):
+    ZIPCODE_MAP = {
+        "종로구": "03000",
+        "중구": "04500",
+        "용산구": "04300",
+        "서대문구": "03600",
+        "은평구": "03300",
+        "마포구": "03900",
+        "서초구": "06500",
+        "강남구": "06000",
+        "송파구": "05500",
+        "강동구": "05200",
+        "성북구": "02700",
+        "광진구": "04900",
+        "동대문구": "02500",
+        "중랑구": "02000",
+        "성동구": "04700",
+        "양천구": "07900",
+        "강서구": "07500",
+        "구로구": "08200",
+        "금천구": "08500",
+        "영등포구": "07200",
+        "동작구": "06900",
+        "관악구": "08700",
+        "강북구": "01000",
+        "도봉구": "01300",
+        "노원구": "01600",
+    }
+    for gu, zipcode in ZIPCODE_MAP.items():
+        if gu in addr:
+            return zipcode
+    return None  # 해당 구가 없을 경우 None 반환
 
 
 # FastAPI app
@@ -186,11 +218,11 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         "name": "nickname",
         "email": "kim@example.com",
         "instrument": "guitar",
-        "zip_code": 90210
+        "address": "서울특별시 성북구 안암동 123-45"
     }
 
     Responses:
-    - 200 OK: User registered successfully
+    - 200 OK: User registered successfully, zip code automatically assigned
     - 400 Bad Request: Username or email already exists
     """
     
@@ -206,7 +238,8 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         instrument=data.instrument,
-        zip_code=data.zip_code
+        zip_code=get_zip_from_addr(data.address),
+        address=data.address
     )
     db.add(user)
     db.commit()
