@@ -22,6 +22,7 @@ class User(Base):
     password = Column(String, nullable=False)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
+    instrument = Column(String, nullable=False)
 
 Base.metadata.create_all(bind=engine)
 
@@ -65,7 +66,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         password=hashed_password,
         name=data.name,
         email=data.email,
-        instrument = data.instrument
+        instrument=data.instrument
     )
     db.add(user)
     db.commit()
