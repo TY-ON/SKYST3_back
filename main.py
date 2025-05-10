@@ -14,6 +14,12 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from kozip import KoZIP
 
+from typing import Optional, Literal
+from pydantic import Field
+import random
+import string
+from datetime import datetime
+
 AREA_MAP = {
     "area1": ["종로구", "중구", "용산구"],
     "area2": ["서대문구", "은평구", "마포구"],
@@ -44,7 +50,33 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     instrument = Column(String, nullable=False)
-    zip_code = Column(Integer, nullable=False)
+    zip_code = Column(String, nullable=False)
+
+
+class Room(Base):
+    __tablename__ = "room"
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String(8), unique=True, index=True, nullable=False)
+    start_date = Column(String, nullable=False)  # YYYY-MM-DD
+    end_date = Column(String, nullable=False)    # YYYY-MM-DD
+    time_slot = Column(String, nullable=False)  # morning/afternoon/evening
+    genre = Column(String, nullable=False)
+    part_random = Column(Integer, default=1)  # 1 if true, 0 otherwise
+    member_count = Column(Integer, default=0)
+    instruments = Column(String, nullable=True)  # comma-separated assigned instruments
+
+class RoomJoin(Base):
+    __tablename__ = "room_join"
+    id = Column(Integer, primary_key=True, index=True)
+    room_code = Column(String, nullable=False)
+    user_id = Column(Integer, nullable=False)
+    instrument = Column(String, nullable=True)
+    start_date = Column(String, nullable=False)
+    end_date = Column(String, nullable=False)
+
+class JoinRoomRequest(BaseModel):
+    room_code: str
+    instrument: Optional[str] = None
 
 Base.metadata.create_all(bind=engine)
 
@@ -55,7 +87,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     instrument: str
-    zip_code: int
+    zip_code: str
 
 class LoginRequest(BaseModel):
     username: str
@@ -64,6 +96,25 @@ class LoginRequest(BaseModel):
 class FindPasswordRequest(BaseModel):
     username: str
     email: EmailStr
+
+class QueueRequest(BaseModel):
+    start_date: str  # YYYY-MM-DD
+    end_date: str    # YYYY-MM-DD
+    time_slot: Literal["morning", "afternoon", "evening"]
+    genre: str
+    instrument: Optional[str] = None  # only for part_random
+
+def generate_room_code():
+    return ''.join(random.choices(string.ascii_uppercase, k=8))
+
+def room_instruments_to_list(instr: str) -> list:
+    return instr.split(",") if instr else []
+
+def list_to_room_instruments(instr_list: list) -> str:
+    return ",".join(instr_list)
+
+def date_overlap(a_start, a_end, b_start, b_end):
+    return a_start <= b_end and b_start <= a_end
 
 # Dependency
 def get_db():
@@ -232,3 +283,118 @@ def get_user_area(zip_code: str):
         raise HTTPException(status_code=404, detail="Area not found for this zipcode")
 
     return {"area": area, "gu": gu_name}
+
+@app.post("/api/queue/part_random")
+def part_random_queue(req: QueueRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_start = datetime.strptime(req.start_date, "%Y-%m-%d").date()
+    user_end = datetime.strptime(req.end_date, "%Y-%m-%d").date()
+
+    for room in db.query(Room).filter(Room.time_slot == req.time_slot,
+                                      Room.genre == req.genre,
+                                      Room.part_random == 1).all():
+
+        joins = db.query(RoomJoin).filter(RoomJoin.room_code == room.room_code).all()
+        valid = True
+        for j in joins:
+            member_start = datetime.strptime(j.start_date, "%Y-%m-%d").date()
+            member_end = datetime.strptime(j.end_date, "%Y-%m-%d").date()
+            if not date_overlap(user_start, user_end, member_start, member_end):
+                valid = False
+                break
+
+        assigned = room_instruments_to_list(room.instruments)
+        if valid and room.member_count < 5 and req.instrument not in assigned:
+            assigned.append(req.instrument)
+            room.member_count += 1
+            room.instruments = list_to_room_instruments(assigned)
+
+            db.add(RoomJoin(room_code=room.room_code, user_id=current_user.id, instrument=req.instrument,
+                            start_date=req.start_date, end_date=req.end_date))
+            db.commit()
+            return {"message": "Joined existing room", "room_code": room.room_code}
+
+    # Create room
+    new_code = generate_room_code()
+    new_room = Room(
+        room_code=new_code,
+        start_date=req.start_date,
+        end_date=req.end_date,
+        time_slot=req.time_slot,
+        genre=req.genre,
+        part_random=1,
+        member_count=1,
+        instruments=req.instrument
+    )
+    db.add(new_room)
+    db.commit()
+    db.add(RoomJoin(room_code=new_code, user_id=current_user.id, instrument=req.instrument,
+                    start_date=req.start_date, end_date=req.end_date))
+    db.commit()
+    return {"message": "Created and joined new room", "room_code": new_code}
+
+@app.post("/api/queue/true_random")
+def true_random_queue(req: QueueRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_start = datetime.strptime(req.start_date, "%Y-%m-%d").date()
+    user_end = datetime.strptime(req.end_date, "%Y-%m-%d").date()
+
+    for room in db.query(Room).filter(Room.time_slot == req.time_slot,
+                                      Room.genre == req.genre,
+                                      Room.part_random == 0).all():
+
+        joins = db.query(RoomJoin).filter(RoomJoin.room_code == room.room_code).all()
+        valid = True
+        for j in joins:
+            member_start = datetime.strptime(j.start_date, "%Y-%m-%d").date()
+            member_end = datetime.strptime(j.end_date, "%Y-%m-%d").date()
+            if not date_overlap(user_start, user_end, member_start, member_end):
+                valid = False
+                break
+
+        if valid and room.member_count < 5:
+            room.member_count += 1
+            db.add(RoomJoin(room_code=room.room_code, user_id=current_user.id,
+                            start_date=req.start_date, end_date=req.end_date))
+            db.commit()
+            return {"message": "Joined existing room", "room_code": room.room_code}
+
+    # Create room
+    new_code = generate_room_code()
+    new_room = Room(
+        room_code=new_code,
+        start_date=req.start_date,
+        end_date=req.end_date,
+        time_slot=req.time_slot,
+        genre=req.genre,
+        part_random=0,
+        member_count=1
+    )
+    db.add(new_room)
+    db.commit()
+    db.add(RoomJoin(room_code=new_code, user_id=current_user.id,
+                    start_date=req.start_date, end_date=req.end_date))
+    db.commit()
+    return {"message": "Created and joined new room", "room_code": new_code}
+
+@app.post("/api/room/join")
+def join_room_direct(req: JoinRoomRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    room = db.query(Room).filter(Room.room_code == req.room_code).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if room.member_count >= 5:
+        raise HTTPException(status_code=400, detail="Room is full")
+
+    if room.part_random:
+        if not req.instrument:
+            raise HTTPException(status_code=400, detail="Instrument is required for part_random room")
+        assigned = room_instruments_to_list(room.instruments)
+        if req.instrument in assigned:
+            raise HTTPException(status_code=400, detail="Instrument already taken")
+        assigned.append(req.instrument)
+        room.instruments = list_to_room_instruments(assigned)
+
+    room.member_count += 1
+    db.add(RoomJoin(room_code=req.room_code, user_id=current_user.id,
+                    instrument=req.instrument, start_date=room.start_date, end_date=room.end_date))
+    db.commit()
+    return {"message": "Successfully joined room", "room_code": req.room_code}
