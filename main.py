@@ -159,7 +159,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db), response: Response 
     Responses:
     - 200 OK: Returns a welcome message
     - 401 Unauthorized: Invalid username or password
-    - Sets a jwt token in the access_token cookie
+    - access_token should be set in Authorization: Bearer
     """
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not bcrypt.verify(data.password, user.password):
@@ -169,17 +169,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db), response: Response 
         "username": user.username
     }
     access_token = create_access_token(token_data)
-
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        max_age=60 * 60,  # 1시간
-        secure=False,     # HTTPS 환경에서는 True로 설정
-        samesite="Lax",
-        path="/"
-    )
-
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
