@@ -12,6 +12,18 @@ import os
 from dotenv import load_dotenv
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
+from kozip import KoZIP
+
+kozip = KoZIP()
+
+AREA_MAP = {
+    "area1": ["종로구", "중구", "용산구"],
+    "area2": ["서대문구", "은평구", "마포구"],
+    "area3": ["서초구", "강남구", "송파구", "강동구"],
+    "area4": ["성북구", "광진구", "동대문구", "중랑구", "성동구"],
+    "area5": ["양천구", "강서구", "구로구", "금천구", "영등포구", "동작구", "관악구"],
+    "area6": ["강북구", "도봉구", "노원구", "은평구"],
+}
 
 load_dotenv()
 
@@ -91,6 +103,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+def get_area_by_gu(gu_name: str):
+    for area, gu_list in AREA_MAP.items():
+        if gu_name in gu_list:
+            return area
+    return None
+
+
 
 # FastAPI app
 app = FastAPI()
@@ -197,3 +217,15 @@ def find_password(data: FindPasswordRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     # add if needed (currently just skeleton)
     return {"message": "Password reset link sent to your email (simulation)"}
+
+@app.get("/api/get_user_area")
+def get_user_area(zip_code: int):
+    # 우편번호를 구로 변환
+    addr = kozip.ZIPtoAddr(str(zip_code), depth=2, format="list")
+    if not addr or len(addr) < 2:
+        raise HTTPException(status_code=400, detail="Invalid zipcode")
+    gu_name = addr[1]
+    area = get_area_by_gu(gu_name)
+    if not area:
+        raise HTTPException(status_code=404, detail="Area not found for this zipcode")
+    return {"area": area, "gu": gu_name}
