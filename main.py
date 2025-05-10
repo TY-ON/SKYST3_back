@@ -104,6 +104,11 @@ class QueueRequest(BaseModel):
     genre: str
     instrument: Optional[str] = None  # only for part_random
 
+class EditProfileRequest(BaseModel):
+    name: Optional[str] = None
+    instrument: Optional[str] = None
+    address: Optional[str] = None
+
 def generate_room_code():
     return ''.join(random.choices(string.ascii_uppercase, k=8))
 
@@ -289,7 +294,8 @@ def read_users_me(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "name": current_user.name,
         "instrument": current_user.instrument,
-        "zip_code": current_user.zip_code
+        "zip_code": current_user.zip_code,
+        "address": current_user.address
     }
 
 @app.post("/api/find-password")
@@ -438,3 +444,27 @@ def get_room_people_count(room_code: str, db: Session = Depends(get_db)):
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     return {"room_code": room_code, "people_count": room.member_count}
+
+@app.post("/api/edit_profile")
+def edit_profile(data: EditProfileRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    updated = False
+
+    if data.name:
+        current_user.name = data.name
+        updated = True
+    if data.instrument:
+        current_user.instrument = data.instrument
+        updated = True
+    if data.address:
+        zip_code = get_zip_from_addr(data.address)
+        if not zip_code:
+            raise HTTPException(status_code=400, detail="Invalid address: zip code not found")
+        current_user.address = data.address
+        current_user.zip_code = zip_code
+        updated = True
+
+    if updated:
+        db.add(current_user)
+        db.commit()
+
+    return {"message": "Profile updated successfully"}
