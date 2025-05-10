@@ -7,6 +7,16 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.hash import bcrypt
+import os
+from dotenv import load_dotenv
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
 # Database setup
 DATABASE_URL = "sqlite:///./users.db"
@@ -51,6 +61,35 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# OAuth2 scheme
+from fastapi.security import OAuth2PasswordBearer
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+
+
+# jwt token creation
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_access_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    payload = verify_access_token(token)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user = db.query(User).filter(User.username == payload.get("sub")).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 # FastAPI app
 app = FastAPI()
@@ -124,7 +163,30 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not bcrypt.verify(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"message": f"Welcome {user.name}"}
+    # JWT 토큰 생성 
+    token_data = {
+        "sub": user.username
+    }
+    access_token = create_access_token(token_data)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "username": user.username,
+            "name": user.name,
+            "instrument": user.instrument,
+            "zip_code": user.zip_code
+        }
+    }
+
+@app.get("/api/me")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "name": current_user.name,
+        "instrument": current_user.instrument,
+        "zip_code": current_user.zip_code
+    }
 
 @app.post("/api/find-password")
 def find_password(data: FindPasswordRequest, db: Session = Depends(get_db)):
