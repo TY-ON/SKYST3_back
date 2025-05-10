@@ -31,7 +31,7 @@ class RegisterRequest(BaseModel):
     password: str
     name: str
     email: EmailStr
-    instrument : str
+    instrument: str
 
 class LoginRequest(BaseModel):
     username: str
@@ -66,7 +66,6 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         instrument = data.instrument
-
     )
     db.add(user)
     db.commit()
