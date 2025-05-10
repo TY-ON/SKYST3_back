@@ -398,3 +398,10 @@ def join_room_direct(req: JoinRoomRequest, current_user: User = Depends(get_curr
                     instrument=req.instrument, start_date=room.start_date, end_date=room.end_date))
     db.commit()
     return {"message": "Successfully joined room", "room_code": req.room_code}
+
+@app.get("/api/room/people_count")
+def get_room_people_count(room_code: str, db: Session = Depends(get_db)):
+    room = db.query(Room).filter(Room.room_code == room_code).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return {"room_code": room_code, "people_count": room.member_count}
