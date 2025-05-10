@@ -20,6 +20,8 @@ import random
 import string
 from datetime import datetime
 
+from starlette.middleware.cors import CORSMiddleware
+
 AREA_MAP = {
     "area1": ["종로구", "중구", "용산구"],
     "area2": ["서대문구", "은평구", "마포구"],
@@ -200,6 +202,18 @@ def get_zip_from_addr(addr):
 
 # FastAPI app
 app = FastAPI()
+
+origins = [
+   "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/api/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
