@@ -14,8 +14,6 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from kozip import KoZIP
 
-kozip = KoZIP()
-
 AREA_MAP = {
     "area1": ["종로구", "중구", "용산구"],
     "area2": ["서대문구", "은평구", "마포구"],
@@ -219,13 +217,18 @@ def find_password(data: FindPasswordRequest, db: Session = Depends(get_db)):
     return {"message": "Password reset link sent to your email (simulation)"}
 
 @app.get("/api/get_user_area")
-def get_user_area(zip_code: int):
-    # 우편번호를 구로 변환
-    addr = kozip.ZIPtoAddr(str(zip_code), depth=2, format="list")
-    if not addr or len(addr) < 2:
+def get_user_area(zip_code: str):
+
+    try:
+        k = KoZIP()
+        addr = k.ZIPtoAddr(zip_code, depth=2, format="list")
+    except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid zipcode")
-    gu_name = addr[1]
+
+    gu_name = addr[0][1]
+
     area = get_area_by_gu(gu_name)
     if not area:
         raise HTTPException(status_code=404, detail="Area not found for this zipcode")
+
     return {"area": area, "gu": gu_name}
