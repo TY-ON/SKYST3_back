@@ -2,6 +2,7 @@
 # http://127.0.0.1:8000/docs
 
 from fastapi import FastAPI, HTTPException, Depends, Body
+from fastapi import Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import declarative_base
@@ -86,7 +87,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     payload = verify_access_token(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user = db.query(User).filter(User.username == payload.get("sub")).first()
+    user = db.query(User).filter(User.username == payload.get("username")).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -143,7 +144,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     return {"message": "User registered successfully"}
 
 @app.post("/api/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, db: Session = Depends(get_db), response: Response = None):
     """
     [Login API]
     POST /api/login
@@ -158,16 +159,27 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     Responses:
     - 200 OK: Returns a welcome message
     - 401 Unauthorized: Invalid username or password
-    - Sets a jwt token in the session cookie
+    - Sets a jwt token in the access_token cookie
     """
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not bcrypt.verify(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     # JWT 토큰 생성 
     token_data = {
-        "sub": user.username
+        "username": user.username
     }
     access_token = create_access_token(token_data)
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=60 * 60,  # 1시간
+        secure=False,     # HTTPS 환경에서는 True로 설정
+        samesite="Lax",
+        path="/"
+    )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
